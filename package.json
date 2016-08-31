@@ -1,6 +1,6 @@
 {
   "name": "cnpmjs.org",
-  "version": "2.12.2",
+  "version": "2.16.1",
   "description": "Private npm registry and web for Enterprise, base on MySQL and Simple Store Service",
   "main": "index.js",
   "scripts": {
@@ -38,6 +38,7 @@
     "koa": "^1.2.0",
     "koa-limit": "^1.0.2",
     "koa-markdown": "^2.0.1",
+    "koa-maxrequests": "^1.0.0",
     "koa-middlewares": "^2.1.0",
     "koa-mock": "^1.6.1",
     "koa-safe-jsonp": "^0.3.1",
@@ -73,7 +74,7 @@
     "should": "8",
     "should-http": "*",
     "sqlite3": "*",
-    "supertest": "1",
+    "supertest": "2.0.0",
     "supertest-as-promised": "3",
     "thunk-mocha": "1"
   },
