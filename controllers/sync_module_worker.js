@@ -187,8 +187,10 @@ SyncModuleWorker.prototype._doneOne = function* (concurrencyId, name, success) {
 
 SyncModuleWorker.prototype.syncUpstream = function* (name) {
   if (config.sourceNpmRegistry.indexOf('registry.npmjs.org') >= 0 ||
-      config.sourceNpmRegistry.indexOf('registry.npmjs.com') >= 0) {
-    this.log('----------------- upstream is npm registry: %s, ignore it -------------------', config.sourceNpmRegistry);
+      config.sourceNpmRegistry.indexOf('registry.npmjs.com') >= 0 ||
+      config.sourceNpmRegistry.indexOf('replicate.npmjs.com') >= 0) {
+    this.log('----------------- upstream is npm registry: %s, ignore it -------------------',
+      config.sourceNpmRegistry);
     return;
   }
   var syncname = name;
@@ -306,39 +308,71 @@ SyncModuleWorker.prototype.next = function* (concurrencyId) {
   }
 
   // get from npm
+  const packageUrl = '/' + name.replace('/', '%2f');
+  // try to sync from official replicate when source npm registry is not cnpmjs.org
+  const registry = config.sourceNpmRegistryIsCNpm ? config.sourceNpmRegistry : config.officialNpmReplicate;
   try {
-    var result = yield npmSerivce.request('/' + name.replace('/', '%2f'));
+    var result = yield npmSerivce.request(packageUrl, { registry: registry });
     pkg = result.data;
     status = result.status;
   } catch (err) {
     // if 404
     if (!err.res || err.res.statusCode !== 404) {
       var errMessage = err.name + ': ' + err.message;
-      that.log('[c#%s] [error] [%s] get package error: %s, status: %s',
-        concurrencyId, name, errMessage, status);
-      yield *that._doneOne(concurrencyId, name, false);
+      that.log('[c#%s] [error] [%s] get package(%s%s) error: %s, status: %s',
+        concurrencyId, name, registry, packageUrl, errMessage, status);
+      yield that._doneOne(concurrencyId, name, false);
       return;
+    }
+  }
+
+  if (status === 404 && pkg && pkg.reason === 'deleted' && registry === config.officialNpmReplicate) {
+    // unpublished package on replicate.npmjs.com
+    // 404 { error: 'not_found', reason: 'deleted' }
+    // try to read from registry.npmjs.com and get the whole unpublished info
+    try {
+      var result = yield npmSerivce.request(packageUrl, { registry: config.sourceNpmRegistry });
+      pkg = result.data;
+      status = result.status;
+    } catch (err) {
+      // if 404
+      if (!err.res || err.res.statusCode !== 404) {
+        var errMessage = err.name + ': ' + err.message;
+        that.log('[c#%s] [error] [%s] get package(%s%s) error: %s, status: %s',
+          concurrencyId, name, config.sourceNpmRegistry, packageUrl, errMessage, status);
+        yield that._doneOne(concurrencyId, name, false);
+        return;
+      }
     }
   }
 
   var unpublishedInfo = null;
   if (status === 404) {
     // check if it's unpublished
-    if (pkg && pkg.time && pkg.time.unpublished && pkg.time.unpublished.time) {
+    // ignore too long package name, see https://github.com/cnpm/cnpmjs.org/issues/1066
+    if (name.length < 80 && pkg && pkg.time && pkg.time.unpublished && pkg.time.unpublished.time) {
       unpublishedInfo = pkg.time.unpublished;
     } else {
       pkg = null;
     }
+  } else {
+    // unpublished package status become to 200
+    if (name.length < 80 && pkg && pkg.time && pkg.time.unpublished && pkg.time.unpublished.time) {
+      unpublishedInfo = pkg.time.unpublished;
+    }
   }
 
   if (!pkg) {
-    that.log('[c#%s] [error] [%s] get package error: package not exists, status: %s',
-      concurrencyId, name, status);
+    that.log('[c#%s] [error] [%s] get package(%s%s) error: package not exists, status: %s',
+      concurrencyId, name, registry, packageUrl, status);
     yield that._doneOne(concurrencyId, name, true);
     return;
   }
 
-  that.log('[c#%d] [%s] pkg status: %d, start...', concurrencyId, name, status);
+  that.log('[c#%d] [%s] package(%s%s) status: %s, dist-tags: %j, time.modified: %s, unpublished: %j, start...',
+    concurrencyId, name, registry, packageUrl, status,
+    pkg['dist-tags'], pkg.time && pkg.time.modified,
+    unpublishedInfo);
 
   if (unpublishedInfo) {
     try {
@@ -359,6 +393,13 @@ SyncModuleWorker.prototype.next = function* (concurrencyId) {
     yield that._doneOne(concurrencyId, name, false);
     return;
   }
+
+  // if (versions.length === 0 && registry === config.officialNpmReplicate) {
+  //   // TODO:
+  //   // need to sync sourceNpmRegistry also
+  //   // make sure package data be update event replicate down.
+  //   // https://github.com/npm/registry/issues/129
+  // }
 
   // has new version
   if (versions.length > 0) {
@@ -617,6 +658,13 @@ SyncModuleWorker.prototype._sync = function* (name, pkg) {
             deprecated: version.deprecated
           });
         }
+        if (exists.package.deprecated && !version.deprecated) {
+          // remove deprecated info
+          missingDeprecateds.push({
+            id: exists.id,
+            deprecated: undefined,
+          });
+        }
         continue;
       }
     }
@@ -676,7 +724,6 @@ SyncModuleWorker.prototype._sync = function* (name, pkg) {
         syncModule.name, index, syncModule.version, err.name, err.stack);
     }
   }
-
 
   if (deletedVersionNames.length === 0) {
     that.log('  [%s] no versions need to deleted', name);
@@ -783,7 +830,7 @@ SyncModuleWorker.prototype._sync = function* (name, pkg) {
       if (r.error) {
         that.log('    save error, id: %s, error: %s', item.id, r.error.message);
       } else {
-        that.log('    saved, id: %s', item.id);
+        that.log('    saved, id: %s, deprecated: %j', item.id, item.deprecated);
       }
     }
   }
@@ -879,7 +926,10 @@ SyncModuleWorker.prototype._sync = function* (name, pkg) {
 };
 
 SyncModuleWorker.prototype._syncOneVersion = function *(versionIndex, sourcePackage) {
-  logger.syncInfo('[sync_module_worker] start sync %s@%s', sourcePackage.name, sourcePackage.version);
+  var delay = Date.now() - sourcePackage.publish_time;
+  logger.syncInfo('[sync_module_worker] delay: %s ms, publish_time: %s, start sync %s@%s',
+    delay, utility.logDate(new Date(sourcePackage.publish_time)),
+    sourcePackage.name, sourcePackage.version);
   var that = this;
   var username = this.username;
   var downurl = sourcePackage.dist.tarball;
@@ -903,9 +953,11 @@ SyncModuleWorker.prototype._syncOneVersion = function *(versionIndex, sourcePack
     devDependencies = Object.keys(sourcePackage.devDependencies || {});
   }
 
-  that.log('    [%s:%d] syncing, version: %s, dist: %j, no deps: %s, ' +
+  that.log('    [%s:%d] syncing, delay: %s ms, version: %s, dist: %j, no deps: %s, ' +
    'publish on cnpm: %s, dependencies: %d, devDependencies: %d, syncDevDependencies: %s',
-    sourcePackage.name, versionIndex, sourcePackage.version,
+    sourcePackage.name, versionIndex,
+    delay,
+    sourcePackage.version,
     sourcePackage.dist, that.noDep, that._publish,
     dependencies.length,
     devDependencies.length, this.syncDevDependencies);
@@ -937,7 +989,14 @@ SyncModuleWorker.prototype._syncOneVersion = function *(versionIndex, sourcePack
   try {
     // get tarball
     logger.syncInfo('[sync_module_worker] downloading %j to %j', downurl, filepath);
-    var r = yield urllib.request(downurl, options);
+    var r;
+    try {
+      r = yield urllib.request(downurl, options);
+    } catch (err) {
+      logger.syncInfo('[sync_module_worker] download %j to %j error: %s', downurl, filepath, err);
+      throw err;
+    }
+
     var statusCode = r.status || -1;
     // https://github.com/cnpm/cnpmjs.org/issues/325
     // if (statusCode === 404) {

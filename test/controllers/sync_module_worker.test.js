@@ -1,9 +1,5 @@
 'use strict';
 
-/**
- * Module dependencies.
- */
-
 var should = require('should');
 var mm = require('mm');
 var thunkify = require('thunkify-wrap');
@@ -57,6 +53,7 @@ describe('test/controllers/sync_module_worker.test.js', function () {
   });
 
   it('should sync public scoped package', function* () {
+    mm(config, 'registryHost', '');
     mm(config, 'sourceNpmRegistry', 'https://registry.npmjs.org');
     var worker = new SyncModuleWorker({
       name: '@sindresorhus/df',
@@ -92,6 +89,7 @@ describe('test/controllers/sync_module_worker.test.js', function () {
     yield checkResult();
 
     var r = yield urllib.request(tgzUrl);
+    console.log(r.status, r.headers);
     r.status.should.equal(200);
   });
 
@@ -183,7 +181,7 @@ describe('test/controllers/sync_module_worker.test.js', function () {
 
   it('should sync unpublished info', function (done) {
     var worker = new SyncModuleWorker({
-      name: ['tnpm'],
+      name: ['afp'],
       username: 'fengmk2'
     });
 
@@ -191,7 +189,7 @@ describe('test/controllers/sync_module_worker.test.js', function () {
     worker.on('end', function () {
       var names = worker.successes.concat(worker.fails);
       names.sort();
-      names.should.eql(['tnpm']);
+      names.should.eql([ 'afp' ]);
       done();
     });
   });
@@ -278,6 +276,44 @@ describe('test/controllers/sync_module_worker.test.js', function () {
         worker.syncUpstream('tnpm'),
         worker.syncUpstream('pedding'),
       ];
+    });
+  });
+
+  describe('sync deprecated info', () => {
+    before(function* () {
+      mm(config, 'syncModel', 'all');
+      const worker = new SyncModuleWorker({
+        name: 'ms',
+        username: 'fengmk2',
+      });
+      worker.start();
+      const end = thunkify.event(worker, 'end');
+      yield end();
+    });
+
+    it('should sync support un-deprecate action', function* () {
+      const listModulesByName = packageService.listModulesByName;
+      mm(packageService, 'listModulesByName', function* (name) {
+        const mods = yield listModulesByName.call(packageService, name);
+        mods.forEach(function (mod) {
+          mod.package.deprecated = 'mock deprecated';
+        });
+        return mods;
+      });
+
+      var worker = new SyncModuleWorker({
+        name: 'ms',
+        username: 'fengmk2',
+      });
+      worker.start();
+      const end = thunkify.event(worker, 'end');
+      yield end();
+      mm.restore();
+      // check deprecated
+      const mods = yield packageService.listModulesByName('ms');
+      for (const mod of mods) {
+        should.ok(mod.package.deprecated === undefined);
+      }
     });
   });
 

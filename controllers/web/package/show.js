@@ -110,7 +110,7 @@ module.exports = function* show(next) {
     pkg.repository = null;
   }
   if (pkg.repository && pkg.repository.url) {
-    pkg.repository.weburl = giturl.parse(pkg.repository.url) || pkg.repository.url;
+    pkg.repository.weburl = /^https?:\/\//.test(pkg.repository.url) ? pkg.repository.url : (giturl.parse(pkg.repository.url) || pkg.repository.url);
   }
   if (!pkg.bugs) {
     pkg.bugs = {};
@@ -176,8 +176,8 @@ module.exports = function* show(next) {
     pkg.isPrivate = false;
     // add security check badge
     pkg.snyk = {
-      badge: `https://snyk.io/test/npm/${pkg.name}/badge.svg?style=flat-square`,
-      url: `https://snyk.io/test/npm/${pkg.name}`,
+      badge: `${config.snykUrl}/test/npm/${pkg.name}/badge.svg?style=flat-square`,
+      url: `${config.snykUrl}/test/npm/${pkg.name}`,
     };
   }
 

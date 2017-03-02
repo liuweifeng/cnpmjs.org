@@ -1,4 +1,54 @@
 
+2.19.3 / 2017-02-22
+==================
+
+  * fix: should get package from orginal registry when package is unpublished (#1130)
+
+2.19.2 / 2017-01-05
+==================
+
+  * fix: should auto sync un-deprecate message (#1105)
+
+2.19.1 / 2016-12-29
+==================
+
+  * fix: try to use the best repository url (#1102)
+
+2.19.0 / 2016-12-21
+==================
+
+  * feat: keyword search with limit to support keywords > 100 (#1097)
+
+2.18.0 / 2016-12-05
+==================
+
+  * fix: support downloads total on scope package (#1088)
+  * fix: try to sync from official replicate (#1076)
+  * feat: add change password script (#1070)
+  * test: skip always fail tests
+  * test: add node v7
+  * feat: show more sync info
+
+2.17.2 / 2016-11-13
+==================
+
+  * fix: ignore long package name on unpublished sync (#1067)
+
+2.17.1 / 2016-11-08
+==================
+
+  * fix: add publish_time for private packages (#1061)
+
+2.17.0 / 2016-11-03
+==================
+
+  * feat: make snyk.io url configable (#1058)
+
+2.16.2 / 2016-09-27
+==================
+
+  * fix: try to use config.registryHost first on setDownloadURL (#1044)
+
 2.16.1 / 2016-08-22
 ==================
 

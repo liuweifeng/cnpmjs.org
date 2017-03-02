@@ -1,21 +1,7 @@
-/**!
- * cnpmjs.org - services/npm.js
- *
- * Copyright(c) cnpmjs.org and other contributors.
- * MIT Licensed
- *
- * Authors:
- *   fengmk2 <fengmk2@gmail.com> (http://fengmk2.github.com)
- *   dead_horse <dead_horse@qq.com> (http://deadhorse.me)
- */
-
 'use strict';
 
-/**
- * Module dependencies.
- */
-
 var ms = require('humanize-ms');
+var cleanNpmMetadata = require('normalize-registry-metadata');
 var urllib = require('../common/urllib');
 var config = require('../config');
 
@@ -34,7 +20,11 @@ function* request(url, options) {
   url = registry + url;
   var r;
   try {
-    r = yield urllib.requestThunk(url, options);
+    r = yield urllib.request(url, options);
+    // https://github.com/npm/registry/issues/87#issuecomment-261450090
+    if (options.dataType === 'json' && r.data && config.officialNpmReplicate === registry) {
+      cleanNpmMetadata(r.data);
+    }
   } catch (err) {
     var statusCode = err.status || -1;
     var data = err.data || '[empty]';

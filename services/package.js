@@ -205,7 +205,7 @@ exports.listPublicModuleNamesByUser = function* (username) {
 };
 
 // start must be a date or timestamp
-exports.listPublicModuleNamesSince = function* (start) {
+exports.listPublicModuleNamesSince = function* listPublicModuleNamesSince(start) {
   if (!(start instanceof Date)) {
     start = new Date(Number(start));
   }
@@ -333,7 +333,7 @@ exports.updateModulePackage = function* (id, pkg) {
 };
 
 exports.updateModulePackageFields = function* (id, fields) {
-  var mod = yield* exports.getModuleById(id);
+  var mod = yield exports.getModuleById(id);
   if (!mod) {
     return null;
   }
@@ -341,7 +341,7 @@ exports.updateModulePackageFields = function* (id, fields) {
   for (var k in fields) {
     pkg[k] = fields[k];
   }
-  return yield* exports.updateModulePackage(id, pkg);
+  return yield exports.updateModulePackage(id, pkg);
 };
 
 exports.updateModuleReadme = function* (id, readme) {

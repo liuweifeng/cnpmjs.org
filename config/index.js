@@ -163,6 +163,7 @@ var config = {
   // but sometimes will request it for some package infomations
   // please don't change it if not necessary
   officialNpmRegistry: 'https://registry.npmjs.com',
+  officialNpmReplicate: 'https://replicate.npmjs.com',
 
   // sync source, upstream registry
   // If you want to directly sync from official npm's registry
@@ -217,6 +218,9 @@ var config = {
   // if you're behind firewall, need to request through http proxy, please set this
   // e.g.: `httpProxy: 'http://proxy.mycompany.com:8080'`
   httpProxy: null,
+
+  // snyk.io root url
+  snykUrl: 'https://snyk.io',
 };
 
 if (process.env.NODE_ENV !== 'test') {
